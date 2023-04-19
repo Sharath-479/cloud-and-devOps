@@ -1,0 +1,135 @@
+HOST IN INVENTORY 
+[webservers]
+203.0.113.111
+203.0.113.112
+
+[dbservers]
+203.0.113.113
+server_hostname
+
+[development]
+203.0.113.111
+203.0.113.113
+
+[production]
+203.0.113.112
+server_hostname
+
+
+
+TREE COMMAND
+
+.
+├── ansible_role_demo
+│   └── roles
+│       └── tomcat
+│           ├── defaults
+│           ├── handlers
+│           ├── tasks
+│           │   └── main.yml
+│           ├── templates
+│           └── vars
+├── inventory
+├── inventory1
+├── playbook.yml
+└── roles.yml
+
+8 directories, 5 files
+
+
+
+MAIN.YML UNDER TASKS
+
+
+---
+# Installing the Java (Open Jdk)
+- name: Install Java 1.8
+  apt: name=openjdk-8-jdk
+
+# Adding the group tomcat
+- name: add group "tomcat"
+  group: name=tomcat
+
+# Adding the user tomcat
+- name: add user "tomcat"
+  user: name=tomcat group=tomcat home=/usr/share/tomcat createhome=no
+  become: True
+  become_method: sudo
+
+# Downloading the tomcat package
+- name: Download Tomcat
+  get_url:
+     url:  "{{ tomcat_download_url }}"
+     dest: "{{ tomcat_download_location }}"
+
+# Creating the tomcat directory
+- name: Create a tomcat directory
+  file:
+    path: /usr/share/tomcat
+    state: directory
+    owner: tomcat
+    group: tomcat
+
+# Extracting the tomcat archive
+- name: Extract tomcat archive
+  unarchive:
+    src: "{{ tomcat_download_location }}"
+    dest: /usr/share/tomcat
+    owner: tomcat
+    group: tomcat
+    remote_src: yes
+    extra_opts: "--strip-components=1"
+    creates: /usr/share/tomcat/bin
+
+# Copying the tomcat template file to the destination node
+- name: Copy tomcat service file
+  template:
+    src: templates/tomcat.service.j2
+    dest: /etc/systemd/system/tomcat.service
+  when: ansible_service_mgr == "systems"
+
+# Starting and Enabling the tomcat service on the destination node.
+- name: Start and enable tomcat
+  service:
+    daemon_reload: yes
+    name: tomcat
+    state: started
+    enabled: yes
+  when: ansible_service_mgr == "systemd"
+  
+  
+  MAIN.YML UNDER VARS
+  
+  tomcat_download_url: http://archive.apache.org/dist/tomcat/tomcat-7/v7.0.61/bin/apache-tomcat-7.0.61.tar.gz
+tomcat_download_location: /usr/share/tomcat/apache-tomcat-7.0.61.tar.gz
+
+
+MAIN.YML UNDER TOMCAT/TEMPLATE/TOMCATSERVICE
+
+
+[Unit]
+Description=Tomcat
+After=network.target
+
+[Service]
+Type=forking
+
+User=tomcat
+Group=tomcat
+
+Environment=JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+Environment=CATALINA_HOME=/usr/share/tomcat
+Environment=CATALINA_BASE=/usr/share/tomcat
+Environment=CATALINA_PID=/usr/share/tomcat/temp/tomcat.pid
+
+ExecStart=/usr/share/tomcat/bin/startup.sh
+ExecStop=/usr/share/tomcat/bin/shutdown.sh
+
+[Install]
+	WantedBy=multi-user.target
+
+
+
+
+
+
